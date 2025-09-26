@@ -1,0 +1,33 @@
+{
+  "tasks": {
+    "dev": "supabase functions serve basepay-initiate-v2 --no-verify-jwt"
+  },
+  "importMap": "./supabase/functions/import_map.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": ["deno.window"],
+    "strict": true
+  },
+  "lint": {
+    "files": {
+      "include": ["supabase/functions/**/*.ts"]
+    },
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["ban-untagged-todo"],
+      "exclude": ["no-unused-vars"]
+    }
+  },
+  "fmt": {
+    "files": {
+      "include": ["supabase/functions/**/*.ts"]
+    },
+    "options": {
+      "useTabs": false,
+      "lineWidth": 80,
+      "indentWidth": 2,
+      "singleQuote": true,
+      "proseWrap": "always"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+project_id = "fkaevutyzgpxvnbjbdwn"
+
+[functions.webhookDeposit]
+verify_jwt = false
