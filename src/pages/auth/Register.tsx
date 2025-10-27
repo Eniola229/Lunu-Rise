@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
+import { CountrySelector } from '@/components/CountrySelector';
 import { auth, db } from '@/integrations/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, query, where, updateDoc, increment } from 'firebase/firestore';
 
-// Simple 8-character referral code generator
+// 8-character referral code
 const generateReferralCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
@@ -28,91 +29,65 @@ const Register = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    country: '',
     password: '',
     confirmPassword: '',
     referralCode: ''
   });
 
+  // pre-fill referral from URL
   useEffect(() => {
-    const refParam = searchParams.get('ref');
-    if (refParam) {
-      setFormData(prev => ({ ...prev, referralCode: refParam }));
-    }
+    const ref = searchParams.get('ref');
+    if (ref) setFormData(prev => ({ ...prev, referralCode: ref }));
   }, [searchParams]);
 
-  const handleReferralBonus = async (referralCode: string) => {
-    const q = query(collection(db, 'users'), where('referralCode', '==', referralCode));
-    const snapshot = await getDocs(q);
-    snapshot.forEach(async (docSnap) => {
-      await updateDoc(doc(db, 'users', docSnap.id), { balance: increment(1000) });
+  const handleReferralBonus = async (code: string) => {
+    const q = query(collection(db, 'users'), where('referralCode', '==', code));
+    const snap = await getDocs(q);
+    snap.forEach(async d => {
+      await updateDoc(doc(db, 'users', d.id), { balance: increment(1000) });
     });
   };
 
-  const handlePhoneSignUp = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate required fields
-    if (!formData.name.trim()) {
-      toast.error('Please enter your name');
-      return;
-    }
-    if (!formData.phone) {
-      toast.error('Please enter your phone number');
-      return;
-    }
-    if (!formData.password || !formData.confirmPassword) {
-      toast.error('Please fill in both password fields');
-      return;
-    }
+    if (!formData.name.trim()) return toast.error('Enter your name');
+    if (!formData.phone) return toast.error('Enter phone number');
+    if (!formData.country) return toast.error('Select your country');
+    if (formData.password !== formData.confirmPassword) return toast.error('Passwords do not match');
+    if (formData.password.length < 6) return toast.error('Password ≥ 6 characters');
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
-
-    // Clean and validate phone
     const cleanPhone = formData.phone.replace(/\s/g, '');
-    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(cleanPhone)) {
-      toast.error('Enter a valid phone number (e.g., +1234567890)');
-      return;
-    }
+    const phoneRe = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRe.test(cleanPhone)) return toast.error('Invalid phone number');
 
     setLoading(true);
     try {
       const dummyEmail = `${cleanPhone}@lunorise.app`;
-      const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, formData.password);
-      const user = userCredential.user;
+      const cred = await createUserWithEmailAndPassword(auth, dummyEmail, formData.password);
+      const uid = cred.user.uid;
 
-      const myReferralCode = generateReferralCode();
-      await setDoc(doc(db, 'users', user.uid), {
+      const myCode = generateReferralCode();
+      await setDoc(doc(db, 'users', uid), {
         name: formData.name.trim(),
         phone: formData.phone,
+        country: formData.country,
         balance: 0,
-        referralCode: myReferralCode,
+        referralCode: myCode,
         referrerCode: formData.referralCode || null,
         createdAt: new Date(),
         authMethod: 'phone'
       });
 
-      if (formData.referralCode) {
-        await handleReferralBonus(formData.referralCode);
-      }
+      if (formData.referralCode) await handleReferralBonus(formData.referralCode);
 
-      toast.success('Account created successfully!');
+      toast.success('Account created!');
       navigate('/dashboard');
-    } catch (error: any) {
-      console.error(error);
-      if (error.code === 'auth/email-already-in-use') {
-        toast.error('This phone number is already registered.');
-      } else {
-        toast.error(error.message || 'Registration failed');
-      }
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use')
+        toast.error('Phone number already registered');
+      else toast.error(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -121,10 +96,9 @@ const Register = () => {
   return (
     <Layout showBottomNav={false}>
       <div className="relative min-h-screen bg-gradient-primary flex items-center justify-center p-4">
-        {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white" />
             <span className="ml-4 text-white text-lg">Loading...</span>
           </div>
         )}
@@ -136,32 +110,42 @@ const Register = () => {
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handlePhoneSignUp} className="space-y-4">
-              {/* Name Field */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Name */}
               <div>
                 <Label>Full Name <span className="text-red-500">*</span></Label>
                 <Input
                   type="text"
                   placeholder="John Doe"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
                   required
                   disabled={loading}
                 />
               </div>
 
-              {/* Phone Number */}
+              {/* Phone */}
               <div>
                 <Label>Phone Number <span className="text-red-500">*</span></Label>
                 <Input
                   type="tel"
                   placeholder="+1234567890"
                   value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
                   required
                   disabled={loading}
                 />
                 <p className="text-xs text-muted-foreground mt-1">Include country code</p>
+              </div>
+
+              {/* Country */}
+              <div>
+                <Label>Country <span className="text-red-500">*</span></Label>
+                <CountrySelector
+                  value={formData.country}
+                  onValueChange={c => setFormData(p => ({ ...p, country: c }))}
+                  disabled={loading}
+                />
               </div>
 
               {/* Password */}
@@ -170,7 +154,7 @@ const Register = () => {
                 <Input
                   type="password"
                   value={formData.password}
-                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
                   required
                   minLength={6}
                   disabled={loading}
@@ -183,20 +167,20 @@ const Register = () => {
                 <Input
                   type="password"
                   value={formData.confirmPassword}
-                  onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, confirmPassword: e.target.value }))}
                   required
                   minLength={6}
                   disabled={loading}
                 />
               </div>
 
-              {/* Referral Code */}
+              {/* Referral */}
               <div>
                 <Label>Referral Code (Optional)</Label>
                 <Input
                   type="text"
                   value={formData.referralCode}
-                  onChange={(e) => setFormData(prev => ({ ...prev, referralCode: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, referralCode: e.target.value }))}
                   disabled={loading}
                 />
               </div>
