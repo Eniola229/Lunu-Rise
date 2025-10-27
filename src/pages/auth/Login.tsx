@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
+import { CountrySelector } from '@/components/CountrySelector';
 import { auth, db } from '@/integrations/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -18,60 +19,52 @@ const Login = () => {
 
   const [formData, setFormData] = useState({
     phone: '',
+    country: '',
     password: ''
   });
 
-  // Redirect if already logged in
+  // redirect if already logged in
   useEffect(() => {
     if (user) navigate('/dashboard');
   }, [user, navigate]);
 
-  const handlePhoneLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.phone || !formData.password) {
-      toast.error('Please enter phone number and password');
-      return;
-    }
+    if (!formData.phone) return toast.error('Enter phone number');
+    if (!formData.country) return toast.error('Select your country');
+    if (!formData.password) return toast.error('Enter password');
 
-    // Clean phone number
     const cleanPhone = formData.phone.replace(/\s/g, '');
-    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(cleanPhone)) {
-      toast.error('Enter a valid phone number (e.g., +1234567890)');
-      return;
-    }
+    const phoneRe = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRe.test(cleanPhone)) return toast.error('Invalid phone number');
 
     setLoading(true);
     try {
       const dummyEmail = `${cleanPhone}@lunorise.app`;
+      const cred = await signInWithEmailAndPassword(auth, dummyEmail, formData.password);
 
-      const userCredential = await signInWithEmailAndPassword(auth, dummyEmail, formData.password);
-      const loggedUser = userCredential.user;
+      // verify Firestore record matches phone + country
+      const q = query(
+        collection(db, 'users'),
+        where('phone', '==', formData.phone),
+        where('country', '==', formData.country)
+      );
+      const snap = await getDocs(q);
 
-      // Optional: Verify user exists in Firestore
-      const q = query(collection(db, 'users'), where('phone', '==', formData.phone));
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        toast.error('No account found with this phone number.');
-        await auth.signOut(); // Force logout
-        return;
+      if (snap.empty) {
+        await auth.signOut();
+        return toast.error('No account found with this phone & country');
       }
 
       toast.success('Login successful!');
-      // Navigation handled by AuthContext
-    } catch (error: any) {
-      console.error(error);
-      if (error.code === 'auth/user-not-found') {
-        toast.error('No account found with this phone number.');
-      } else if (error.code === 'auth/wrong-password') {
-        toast.error('Incorrect password.');
-      } else if (error.code === 'auth/invalid-credential') {
-        toast.error('Invalid phone number or password.');
-      } else {
-        toast.error(error.message || 'Login failed');
-      }
+      // navigation handled by AuthContext
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found')
+        toast.error('No account found');
+      else if (err.code === 'auth/wrong-password')
+        toast.error('Incorrect password');
+      else toast.error(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -80,10 +73,9 @@ const Login = () => {
   return (
     <Layout showBottomNav={false}>
       <div className="relative min-h-screen bg-gradient-primary flex items-center justify-center p-4">
-        {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white" />
             <span className="ml-4 text-white text-lg">Loading...</span>
           </div>
         )}
@@ -91,23 +83,33 @@ const Login = () => {
         <Card className="w-full max-w-md z-10">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-            <CardDescription>Sign in with your phone number</CardDescription>
+            <CardDescription>Sign in with phone & country</CardDescription>
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handlePhoneLogin} className="space-y-4">
-              {/* Phone Number */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Phone */}
               <div>
                 <Label>Phone Number <span className="text-red-500">*</span></Label>
                 <Input
                   type="tel"
                   placeholder="+1234567890"
                   value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
                   required
                   disabled={loading}
                 />
-                <p class="text-xs text-muted-foreground mt-1">Include country code</p>
+                <p className="text-xs text-muted-foreground mt-1">Include country code</p>
+              </div>
+
+              {/* Country */}
+              <div>
+                <Label>Country <span className="text-red-500">*</span></Label>
+                <CountrySelector
+                  value={formData.country}
+                  onValueChange={c => setFormData(p => ({ ...p, country: c }))}
+                  disabled={loading}
+                />
               </div>
 
               {/* Password */}
@@ -116,7 +118,7 @@ const Login = () => {
                 <Input
                   type="password"
                   value={formData.password}
-                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
                   required
                   minLength={6}
                   disabled={loading}
