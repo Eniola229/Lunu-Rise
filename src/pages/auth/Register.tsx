@@ -26,6 +26,7 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
+    name: '',
     phone: '',
     password: '',
     confirmPassword: '',
@@ -50,9 +51,17 @@ const Register = () => {
   const handlePhoneSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Basic validation
-    if (!formData.phone || !formData.password || !formData.confirmPassword) {
-      toast.error('Please fill in all required fields');
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Please enter your name');
+      return;
+    }
+    if (!formData.phone) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+    if (!formData.password || !formData.confirmPassword) {
+      toast.error('Please fill in both password fields');
       return;
     }
 
@@ -66,7 +75,7 @@ const Register = () => {
       return;
     }
 
-    // Simple phone format check
+    // Clean and validate phone
     const cleanPhone = formData.phone.replace(/\s/g, '');
     const phoneRegex = /^\+?[1-9]\d{1,14}$/;
     if (!phoneRegex.test(cleanPhone)) {
@@ -82,6 +91,7 @@ const Register = () => {
 
       const myReferralCode = generateReferralCode();
       await setDoc(doc(db, 'users', user.uid), {
+        name: formData.name.trim(),
         phone: formData.phone,
         balance: 0,
         referralCode: myReferralCode,
@@ -127,6 +137,20 @@ const Register = () => {
 
           <CardContent>
             <form onSubmit={handlePhoneSignUp} className="space-y-4">
+              {/* Name Field */}
+              <div>
+                <Label>Full Name <span className="text-red-500">*</span></Label>
+                <Input
+                  type="text"
+                  placeholder="John Doe"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Phone Number */}
               <div>
                 <Label>Phone Number <span className="text-red-500">*</span></Label>
                 <Input
@@ -140,6 +164,7 @@ const Register = () => {
                 <p className="text-xs text-muted-foreground mt-1">Include country code</p>
               </div>
 
+              {/* Password */}
               <div>
                 <Label>Password <span className="text-red-500">*</span></Label>
                 <Input
@@ -152,6 +177,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Confirm Password */}
               <div>
                 <Label>Confirm Password <span className="text-red-500">*</span></Label>
                 <Input
@@ -164,6 +190,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Referral Code */}
               <div>
                 <Label>Referral Code (Optional)</Label>
                 <Input
