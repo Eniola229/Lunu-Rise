@@ -6,80 +6,69 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
-import { CountrySelector } from '@/components/CountrySelector';
-import { auth, googleProvider, appleProvider, db } from '@/integrations/firebase';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { auth, db } from '@/integrations/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { user } = useAuth(); // AuthContext
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    country: ''
+    phone: '',
+    password: ''
   });
 
-  // Redirect automatically if already logged in
+  // Redirect if already logged in
   useEffect(() => {
     if (user) navigate('/dashboard');
   }, [user, navigate]);
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.country) {
-      toast.error('Please select your country');
+
+    if (!formData.phone || !formData.password) {
+      toast.error('Please enter phone number and password');
+      return;
+    }
+
+    // Clean phone number
+    const cleanPhone = formData.phone.replace(/\s/g, '');
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      toast.error('Enter a valid phone number (e.g., +1234567890)');
       return;
     }
 
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const dummyEmail = `${cleanPhone}@lunorise.app`;
+
+      const userCredential = await signInWithEmailAndPassword(auth, dummyEmail, formData.password);
       const loggedUser = userCredential.user;
 
-      if (!loggedUser.emailVerified) {
-        toast.error('Please verify your email before logging in.');
-        return;
-      }
-
-      toast.success('Login successful!');
-      // navigation will be triggered by AuthContext effect
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        toast.error('Invalid email or password.');
-      } else {
-        toast.error(error.message || 'Login failed');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOAuthLogin = async (provider: typeof googleProvider | typeof appleProvider) => {
-    setLoading(true);
-    try {
-      const userCredential = await signInWithPopup(auth, provider);
-      const loggedUser = userCredential.user;
-
-      // Check if user exists in Firestore
-      const q = query(collection(db, 'users'), where('email', '==', loggedUser.email));
+      // Optional: Verify user exists in Firestore
+      const q = query(collection(db, 'users'), where('phone', '==', formData.phone));
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        toast.error('User does not exist. Please register first.');
+        toast.error('No account found with this phone number.');
+        await auth.signOut(); // Force logout
         return;
       }
 
       toast.success('Login successful!');
-      // navigation will be triggered by AuthContext effect
+      // Navigation handled by AuthContext
     } catch (error: any) {
       console.error(error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        toast.error('Login cancelled. You closed the popup.');
-      } else if (error.code === 'auth/account-exists-with-different-credential') {
-        toast.error('An account already exists with the same email but different sign-in method.');
+      if (error.code === 'auth/user-not-found') {
+        toast.error('No account found with this phone number.');
+      } else if (error.code === 'auth/wrong-password') {
+        toast.error('Incorrect password.');
+      } else if (error.code === 'auth/invalid-credential') {
+        toast.error('Invalid phone number or password.');
       } else {
         toast.error(error.message || 'Login failed');
       }
@@ -91,7 +80,7 @@ const Login = () => {
   return (
     <Layout showBottomNav={false}>
       <div className="relative min-h-screen bg-gradient-primary flex items-center justify-center p-4">
-        {/* Spinner Overlay */}
+        {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
             <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white"></div>
@@ -102,58 +91,35 @@ const Login = () => {
         <Card className="w-full max-w-md z-10">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-            <CardDescription>Sign in to your account</CardDescription>
+            <CardDescription>Sign in with your phone number</CardDescription>
           </CardHeader>
-          <CardContent>
-            {/* OAuth Buttons */}
-            <Button
-              onClick={() => handleOAuthLogin(googleProvider)}
-              className="w-full mb-2"
-              variant="secondary"
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Login with Google'}
-            </Button>
-            <Button
-              onClick={() => handleOAuthLogin(appleProvider)}
-              className="w-full mb-4"
-              variant="secondary"
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Login with Apple'}
-            </Button>
 
-            {/* Email login form */}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+          <CardContent>
+            <form onSubmit={handlePhoneLogin} className="space-y-4">
+              {/* Phone Number */}
               <div>
-                <Label htmlFor="country">Country</Label>
-                <CountrySelector
-                  value={formData.country}
-                  onValueChange={(country) => setFormData(prev => ({ ...prev, country }))}
+                <Label>Phone Number <span className="text-red-500">*</span></Label>
+                <Input
+                  type="tel"
+                  placeholder="+1234567890"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  required
                   disabled={loading}
                 />
+                <p class="text-xs text-muted-foreground mt-1">Include country code</p>
               </div>
 
+              {/* Password */}
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label>Password <span className="text-red-500">*</span></Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="Enter email"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   required
+                  minLength={6}
+                  disabled={loading}
                 />
               </div>
 
@@ -161,7 +127,7 @@ const Login = () => {
                 type="submit"
                 className="w-full"
                 variant="primary_gradient"
-                disabled={loading || !formData.country}
+                disabled={loading}
               >
                 {loading ? 'Signing In...' : 'Sign In'}
               </Button>
