@@ -8,27 +8,39 @@ import {
   where,
   onSnapshot,
   QueryDocumentSnapshot,
-  DocumentData
+  DocumentData,
+  Timestamp
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { ArrowUpRight, ArrowDownLeft, RefreshCw, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import Layout from '@/components/Layout';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '@/components/ui/dialog';
 
 interface Transaction {
   id: string;
-  userEmail: string;
-  type: string;
-  amount_usd?: number;
-  amount?: number; // for withdrawals
+  userId: string;
+  type: 'deposit' | 'withdrawal' | 'crypto';
+  amount: number; // in cents
   amountCrypto?: number;
   currency?: string;
-  createdAt: any; // Firestore Timestamp
-  status: string;
+  createdAt: Timestamp;
+  status: 'pending' | 'success' | 'failed' | 'confirmed' | 'declined';
   note?: string;
   txHash?: string;
   card?: { last4: string; expiry: string };
@@ -36,18 +48,25 @@ interface Transaction {
 }
 
 const TransactionsFirebase = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [filteredTxs, setFilteredTxs] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'crypto'>('all');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
+  // Format cents → $X,XXX.XX
+  const formatUSD = (cents: number) =>
+    `$${ (cents / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }`;
+
+  // === Real-time Transactions ===
   useEffect(() => {
-    if (!user?.email) return;
+    if (!user?.uid) return;
 
-    setLoading(true);
-
-    const q = query(collection(db, 'transactions'), where('userEmail', '==', user.email));
+    const q = query(
+      collection(db, 'transactions'),
+      where('userId', '==', user.uid)
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -59,34 +78,42 @@ const TransactionsFirebase = () => {
           })
         ) as Transaction[];
 
-        // Sort by createdAt descending
+        // Sort newest first
         txs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-        const filteredTxs =
-          filter === 'all' ? txs : txs.filter((tx) => tx.type === filter);
-
-        setTransactions(filteredTxs);
+        setTransactions(txs);
         setLoading(false);
       },
       (err) => {
         console.error('Error fetching transactions:', err);
-        toast.error('Failed to fetch transactions');
+        toast.error('Failed to load transactions');
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [user?.email, filter]);
+  }, [user?.uid]);
 
+  // === Filter Transactions ===
+  useEffect(() => {
+    if (filter === 'all') {
+      setFilteredTxs(transactions);
+    } else {
+      setFilteredTxs(transactions.filter((tx) => tx.type === filter));
+    }
+  }, [transactions, filter]);
 
+  // === Icons & Badges ===
   const getTransactionIcon = (type: string) => {
     switch (type) {
       case 'deposit':
-        return <ArrowDownLeft className="h-4 w-4 text-success" />;
+        return <ArrowDownLeft className="h-5 w-5 text-green-500" />;
       case 'withdrawal':
-        return <ArrowUpRight className="h-4 w-4 text-red-600" />;
+        return <ArrowUpRight className="h-5 w-5 text-red-500" />;
+      case 'crypto':
+        return <RefreshCw className="h-5 w-5 text-blue-500" />;
       default:
-        return <RefreshCw className="h-4 w-4 text-muted-foreground" />;
+        return <RefreshCw className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
@@ -94,35 +121,36 @@ const TransactionsFirebase = () => {
     switch (status) {
       case 'pending':
         return <Badge variant="outline">Pending</Badge>;
+      case 'success':
       case 'confirmed':
-        return <Badge variant="secondary">Confirmed</Badge>;
+        return <Badge variant="secondary">Success</Badge>;
+      case 'failed':
       case 'declined':
-        return <Badge variant="destructive">Declined</Badge>;
+        return <Badge variant="destructive">Failed</Badge>;
       default:
         return <Badge variant="default">{status}</Badge>;
     }
   };
 
+  // === Export to CSV ===
   const exportToCSV = () => {
-    if (transactions.length === 0) {
+    if (filteredTxs.length === 0) {
       toast.error('No transactions to export');
       return;
     }
 
     const headers = ['Date', 'Type', 'Amount', 'Status', 'Note'];
-    const csvContent = [
-      headers.join(','),
-      ...transactions.map((tx) => [
-        new Date(tx.createdAt?.seconds * 1000).toLocaleString(),
-        tx.type,
-        tx.amount_usd ??
-          tx.amount ??
-          (tx.amountCrypto ? `${tx.amountCrypto} ${tx.currency}` : '-'),
-        tx.status,
-        tx.note || ''
-      ].join(','))
-    ].join('\n');
+    const rows = filteredTxs.map((tx) => [
+      tx.createdAt ? new Date(tx.createdAt.seconds * 1000).toLocaleString() : 'N/A',
+      tx.type.charAt(0).toUpperCase() + tx.type.slice(1),
+      tx.amountCrypto
+        ? `${tx.amountCrypto} ${tx.currency || ''}`
+        : formatUSD(tx.amount),
+      tx.status,
+      tx.note || ''
+    ]);
 
+    const csvContent = [headers, ...rows].map((row) => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -131,13 +159,18 @@ const TransactionsFirebase = () => {
     a.click();
     window.URL.revokeObjectURL(url);
 
-    toast.success('Transactions exported successfully');
+    toast.success('Exported successfully');
   };
 
-const formatUSD = (val?: number) => {
-  if (val === undefined || val === null) return '-';
-  return `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+  if (authLoading || loading) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -145,9 +178,9 @@ const formatUSD = (val?: number) => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <h1 className="text-2xl font-bold">Transaction History</h1>
-          <div className="flex gap-2">
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-40">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -160,25 +193,23 @@ const formatUSD = (val?: number) => {
             <Button
               variant="outline"
               onClick={exportToCSV}
-              disabled={transactions.length === 0}
+              disabled={filteredTxs.length === 0}
+              className="flex-1 sm:flex-initial"
             >
-              <Download className="h-4 w-4 mr-2" /> Export CSV
+              <Download className="h-4 w-4 mr-2" /> Export
             </Button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12 text-muted-foreground">
-            Loading transactions...
-          </div>
-        ) : transactions.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
+        {/* Transactions List */}
+        {filteredTxs.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
             <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No transactions found</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {transactions.map((tx) => (
+            {filteredTxs.map((tx) => (
               <Card
                 key={tx.id}
                 className="hover:shadow-md transition-shadow cursor-pointer"
@@ -190,27 +221,19 @@ const formatUSD = (val?: number) => {
                       {getTransactionIcon(tx.type)}
                     </div>
                     <div>
-                      <div className="font-semibold">
-                        {tx.type === 'deposit'
-                          ? 'Deposit'
-                          : tx.type === 'withdrawal'
-                          ? 'Withdrawal'
-                          : 'Crypto Payment'}
-                      </div>
+                      <div className="font-semibold capitalize">{tx.type}</div>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(tx.createdAt?.seconds * 1000).toLocaleString()}
+                        {tx.createdAt
+                          ? new Date(tx.createdAt.seconds * 1000).toLocaleString()
+                          : 'N/A'}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="font-bold">
-                      {tx.amount_usd
-                          ? formatUSD(tx.amount_usd)
-                          : tx.amount
-                          ? formatUSD(tx.amount)
-                          : tx.amountCrypto
-                          ? `${tx.amountCrypto} ${tx.currency}`
-                          : '-'}
+                      {tx.amountCrypto
+                        ? `${tx.amountCrypto} ${tx.currency || ''}`
+                        : formatUSD(tx.amount)}
                     </p>
                     <div className="mt-1">{getStatusBadge(tx.status)}</div>
                   </div>
@@ -220,38 +243,33 @@ const formatUSD = (val?: number) => {
           </div>
         )}
 
-        {/* Transaction Modal */}
-        {selectedTx && (
-          <Dialog open={true} onOpenChange={() => setSelectedTx(null)}>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Transaction Details</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2 p-4">
+        {/* Transaction Detail Modal */}
+        <Dialog open={!!selectedTx} onOpenChange={() => setSelectedTx(null)}>
+          <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Transaction Details</DialogTitle>
+            </DialogHeader>
+            {selectedTx && (
+              <div className="space-y-3 text-sm">
                 <p>
                   <strong>Type:</strong>{' '}
-                  {selectedTx.type === 'deposit'
-                    ? 'Deposit'
-                    : selectedTx.type === 'withdrawal'
-                    ? 'Withdrawal'
-                    : 'Crypto Payment'}
+                  <span className="capitalize">{selectedTx.type}</span>
                 </p>
                 <p>
                   <strong>Date:</strong>{' '}
-                  {new Date(selectedTx.createdAt?.seconds * 1000).toLocaleString()}
+                  {selectedTx.createdAt
+                    ? new Date(selectedTx.createdAt.seconds * 1000).toLocaleString()
+                    : 'N/A'}
                 </p>
                 <p>
                   <strong>Amount:</strong>{' '}
-                    {selectedTx.amount_usd
-                      ? formatUSD(selectedTx.amount_usd)
-                      : selectedTx.amount
-                      ? formatUSD(selectedTx.amount)
-                      : selectedTx.amountCrypto
-                      ? `${selectedTx.amountCrypto} ${selectedTx.currency}`
-                      : '-'}
+                  {selectedTx.amountCrypto
+                    ? `${selectedTx.amountCrypto} ${selectedTx.currency || ''}`
+                    : formatUSD(selectedTx.amount)}
                 </p>
                 <p>
-                  <strong>Status:</strong> {selectedTx.status}
+                  <strong>Status:</strong>{' '}
+                  <span className="inline-block">{getStatusBadge(selectedTx.status)}</span>
                 </p>
                 {selectedTx.note && (
                   <p>
@@ -260,7 +278,15 @@ const formatUSD = (val?: number) => {
                 )}
                 {selectedTx.txHash && (
                   <p>
-                    <strong>TxHash:</strong> {selectedTx.txHash}
+                    <strong>Tx Hash:</strong>{' '}
+                    <a
+                      href={`https://etherscan.io/tx/${selectedTx.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 underline"
+                    >
+                      {selectedTx.txHash.slice(0, 10)}...{selectedTx.txHash.slice(-8)}
+                    </a>
                   </p>
                 )}
                 {selectedTx.card && (
@@ -274,17 +300,15 @@ const formatUSD = (val?: number) => {
                     {selectedTx.bank.number})
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  className="mt-4 w-full"
-                  onClick={() => setSelectedTx(null)}
-                >
-                  Close
-                </Button>
               </div>
-            </DialogContent>
-          </Dialog>
-        )}
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedTx(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
