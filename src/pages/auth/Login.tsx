@@ -11,6 +11,8 @@ import { auth, googleProvider, appleProvider, db } from '@/integrations/firebase
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
+import { FcGoogle } from "react-icons/fc";
+import { FaApple } from "react-icons/fa";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -105,24 +107,33 @@ const Login = () => {
             <CardDescription>Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* OAuth Buttons */}
-            <Button
-              onClick={() => handleOAuthLogin(googleProvider)}
-              className="w-full mb-2"
-              variant="secondary"
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Login with Google'}
-            </Button>
-            <Button
-              onClick={() => handleOAuthLogin(appleProvider)}
-              className="w-full mb-4"
-              variant="secondary"
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Login with Apple'}
-            </Button>
+            <div className="flex justify-center gap-4 mt-4">
+              <Button
+                onClick={() => handleOAuthLogin(googleProvider)}
+                className="flex items-center justify-center p-3 rounded-full border hover:bg-gray-100 transition"
+                variant="secondary"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="animate-pulse text-sm">...</span>
+                ) : (
+                  <FcGoogle className="text-2xl" />
+                )}
+              </Button>
 
+              <Button
+                onClick={() => handleOAuthLogin(appleProvider)}
+                className="flex items-center justify-center p-3 rounded-full border hover:bg-gray-100 transition"
+                variant="secondary"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="animate-pulse text-sm">...</span>
+                ) : (
+                  <FaApple className="text-2xl text-black" />
+                )}
+              </Button>
+            </div>
             {/* Email login form */}
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div>

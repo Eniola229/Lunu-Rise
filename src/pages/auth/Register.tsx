@@ -11,6 +11,8 @@ import { auth, db, googleProvider, appleProvider } from '@/integrations/firebase
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, query, where, updateDoc, increment } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
+import { FcGoogle } from "react-icons/fc";
+import { FaApple } from "react-icons/fa";
 
 // Simple 8-character referral code generator
 const generateReferralCode = () => {
@@ -149,12 +151,33 @@ const Register = () => {
             <CardDescription>Join Luno Rise and start earning today</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => handleOAuthSignIn(googleProvider)} className="w-full mb-2" variant="secondary" disabled={loading}>
-              {loading ? 'Loading...' : 'Sign Up with Google'}
+          <div className="flex justify-center gap-4">
+            <Button
+              onClick={() => handleOAuthSignIn(googleProvider)}
+              className="flex items-center justify-center p-3 rounded-full border hover:bg-gray-100 transition"
+              variant="secondary"
+              disabled={loading}
+            >
+              {loading ? (
+                <span className="animate-pulse text-sm">...</span>
+              ) : (
+                <FcGoogle className="text-2xl" />
+              )}
             </Button>
-            <Button onClick={() => handleOAuthSignIn(appleProvider)} className="w-full mb-4" variant="secondary" disabled={loading}>
-              {loading ? 'Loading...' : 'Sign Up with Apple'}
+
+            <Button
+              onClick={() => handleOAuthSignIn(appleProvider)}
+              className="flex items-center justify-center p-3 rounded-full border hover:bg-gray-100 transition"
+              variant="secondary"
+              disabled={loading}
+            >
+              {loading ? (
+                <span className="animate-pulse text-sm">...</span>
+              ) : (
+                <FaApple className="text-2xl text-black" />
+              )}
             </Button>
+          </div>
 
             <form onSubmit={handleEmailSignUp} className="space-y-4">
               <div>
@@ -164,18 +187,6 @@ const Register = () => {
               <div>
                 <Label>Phone Number</Label>
                 <Input id="phone" type="tel" value={formData.phone} onChange={e => setFormData(prev => ({ ...prev, phone: e.target.value }))} required />
-              </div>
-              <div>
-                <Label>Country</Label>
-                <CountrySelector value={formData.country} onValueChange={country => setFormData(prev => ({ ...prev, country }))} disabled={loading} />
-              </div>
-              <div>
-                <Label>City</Label>
-                <Input type="text" value={formData.city} onChange={e => setFormData(prev => ({ ...prev, city: e.target.value }))} required />
-              </div>
-              <div>
-                <Label>Address</Label>
-                <Input type="text" value={formData.address} onChange={e => setFormData(prev => ({ ...prev, address: e.target.value }))} required />
               </div>
               <div>
                 <Label>Password</Label>

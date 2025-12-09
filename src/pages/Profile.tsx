@@ -207,14 +207,6 @@ const Profile = () => {
                   <Label>Country</Label>
                   <CountrySelector value={userData?.country || ''} onValueChange={(val) => setUserData({ ...userData, country: val })} />
                 </div>
-                <div>
-                  <Label>City</Label>
-                  <Input value={userData?.city || ''} onChange={(e) => setUserData({ ...userData, city: e.target.value })} />
-                </div>
-                <div>
-                  <Label>Address</Label>
-                  <Input value={userData?.address || ''} onChange={(e) => setUserData({ ...userData, address: e.target.value })} />
-                </div>
                 <Button onClick={handleSaveProfile} disabled={saving}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -223,8 +215,6 @@ const Profile = () => {
               <div className="space-y-2">
                 <div className="flex justify-between"><span>Phone:</span><span>{userData?.phone || 'N/A'}</span></div>
                 <div className="flex justify-between"><span>Country:</span><span>{userData?.country || 'N/A'}</span></div>
-                <div className="flex justify-between"><span>City:</span><span>{userData?.city || 'N/A'}</span></div>
-                <div className="flex justify-between"><span>Address:</span><span>{userData?.address || 'N/A'}</span></div>
                 <div className="flex justify-between items-center">
                   <span>Referral Code:</span>
                   <div className="flex items-center gap-2">
