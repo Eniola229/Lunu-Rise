@@ -178,7 +178,7 @@ const Register = () => {
                 <Label>Country</Label>
                 <CountrySelector
                   value={formData.country}
-                  onChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
                 />
               </div>
               <div>
