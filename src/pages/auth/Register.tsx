@@ -51,7 +51,7 @@ const Register = () => {
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.country || !formData.city || !formData.address) {
+    if (!formData.country) {
       toast.error('Please fill all required fields');
       return;
     }
