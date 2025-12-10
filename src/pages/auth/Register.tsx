@@ -33,8 +33,6 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     country: '',
-    city: '',
-    address: '',
     referralCode: ''
   });
 
@@ -74,8 +72,6 @@ const Register = () => {
         email: formData.email,
         phone: formData.phone,
         country: formData.country,
-        city: formData.city,
-        address: formData.address,
         balance: 0,
         referralCode: myReferralCode,
         referrerCode: formData.referralCode || null,
@@ -108,8 +104,6 @@ const Register = () => {
           email: user.email,
           phone: user.phoneNumber || '',
           country: '',
-          city: '',
-          address: '',
           balance: 0,
           referralCode: myReferralCode,
           referrerCode: searchParams.get('ref') || null,
@@ -180,6 +174,13 @@ const Register = () => {
           </div>
 
             <form onSubmit={handleEmailSignUp} className="space-y-4">
+              <div>
+                <Label>Country</Label>
+                <CountrySelector
+                  value={formData.country}
+                  onChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
+                />
+              </div>
               <div>
                 <Label>Email</Label>
                 <Input id="email" type="email" value={formData.email} onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))} required />
